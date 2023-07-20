@@ -1,6 +1,8 @@
 # Copyright 2019-2021 ETH Zurich and the DaCe authors. All rights reserved.
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.23)
 project(dace_program)
+
+set(CMAKE_VERBOSE_MAKEFILE on)
 
 # General options
 set(DACE_PROGRAM_NAME "dace_program" CACHE STRING "Name of DaCe program")
@@ -106,21 +108,25 @@ find_package(OpenMP REQUIRED COMPONENTS CXX)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 add_definitions(-DDACE_BINARY_DIR=\"${CMAKE_BINARY_DIR}\")
 set(DACE_LIBS ${DACE_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${OpenMP_CXX_LIBRARIES})
+
 if(DACE_ENABLE_MPI)
   find_package(MPI REQUIRED)
-  include_directories(${MPI_CXX_INCLUDE_PATH})
-  set(DACE_LIBS ${DACE_LIBS} ${MPI_CXX_LIBRARIES})
+  # include_directories(${MPI_CXX_INCLUDE_PATH})
+  list(APPEND DACE_LIBS mpi)
 endif()
+
 if(DACE_ENABLE_CUDA)
-  find_package(CUDA REQUIRED)
-  set(CUDA_PROPAGATE_HOST_FLAGS OFF)
-  include_directories(${CUDA_INCLUDE_DIRS})
-  if (MSVC_IDE)
-    link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib/x64)
-  else()
-    link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib64)
-  endif()
-  set(DACE_LIBS ${DACE_LIBS} ${CUDA_LIBRARIES})
+  # Check if exists
+  #set(CUDAToolkit_ROOT ${CUDA_TOOLKIT_ROOT_DIR})
+
+  find_package(CUDAToolkit REQUIRED)
+  set(CMAKE_CUDA_STANDARD 11)
+  # TODO: arch here
+  set(CMAKE_CUDA_ARCHITECTURES 80)
+  enable_language(CUDA)
+
+  list(APPEND DACE_LIBS CUDA::cudart)
+
   add_definitions(-DWITH_CUDA)
 
   if (MSVC_IDE)
@@ -210,7 +216,8 @@ string(REPLACE "_DACE_CMAKE_EXPAND" "$" DACE_ENV_INCLUDES "${DACE_ENV_INCLUDES}"
 string(REPLACE "_DACE_CMAKE_EXPAND" "$" DACE_ENV_LIBRARIES "${DACE_ENV_LIBRARIES}")
 string(REPLACE " " ";" DACE_ENV_INCLUDES "${DACE_ENV_INCLUDES}")
 string(REPLACE " " ";" DACE_ENV_LIBRARIES "${DACE_ENV_LIBRARIES}")
-include_directories(${DACE_ENV_INCLUDES})
+message(whatever="${DACE_ENV_INCLUDES}")
+include_directories(SYSTEM ${DACE_ENV_INCLUDES})
 set(DACE_LIBS ${DACE_LIBS} ${DACE_ENV_LIBRARIES})
 string(REPLACE "_DACE_CMAKE_EXPAND" "$" DACE_ENV_LINK_FLAGS "${DACE_ENV_LINK_FLAGS}")
 string(REPLACE "_DACE_CMAKE_EXPAND" "$" DACE_ENV_COMPILE_FLAGS "${DACE_ENV_COMPILE_FLAGS}")
@@ -219,6 +226,10 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${DACE_ENV_LINK_FLAG
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${DACE_ENV_LINK_FLAGS}")
 set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} ${DACE_ENV_LINK_FLAGS}")
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${DACE_ENV_LINK_FLAGS}")
+
+# add_link_options("-Wl,--no-undefined -lnvshmem_host -lnvshmem_device")
+add_link_options("-Wl,--no-undefined")
+add_link_options("-Wl,-v")
 
 if(DACE_ENABLE_XILINX OR DACE_ENABLE_INTELFPGA)
   set(DACE_HLSLIB_DIR ${CMAKE_SOURCE_DIR}/../external/hlslib)
@@ -245,32 +256,50 @@ endif()
 # Create CUDA object files
 if(DACE_ENABLE_CUDA)
   # Get local CUDA architectures
-  if (NOT DEFINED LOCAL_CUDA_ARCHITECTURES)
-      execute_process(COMMAND "${CUDA_NVCC_EXECUTABLE}" "-ccbin" "${CMAKE_CXX_COMPILER}" "--run"
-                      "${CMAKE_SOURCE_DIR}/tools/get_cuda_arch.cpp"
-                      OUTPUT_VARIABLE _arch_out RESULT_VARIABLE _arch_res
-                      ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+#  if (NOT DEFINED LOCAL_CUDA_ARCHITECTURES)
+#      execute_process(COMMAND "${CUDA_NVCC_EXECUTABLE}" "-ccbin" "${CMAKE_CXX_COMPILER}" "--run"
+#                      "${CMAKE_SOURCE_DIR}/tools/get_cuda_arch.cpp"
+#                      OUTPUT_VARIABLE _arch_out RESULT_VARIABLE _arch_res
+#                      ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-      if(_arch_res EQUAL 0)
-        string(REGEX REPLACE "\n" ";" _arch_out "${_arch_out}")
-        list(GET _arch_out -1 _local_arch)
-        string(REGEX REPLACE " " ";" _local_arch "${_local_arch}")
-        set(LOCAL_CUDA_ARCHITECTURES "${_local_arch}" CACHE STRING "Detected local GPUs for compilation")
-        message(STATUS "Local CUDA architectures detected: ${LOCAL_CUDA_ARCHITECTURES}")
-      else()
-        set(LOCAL_CUDA_ARCHITECTURES "" CACHE STRING "Detected local GPUs for compilation")
-        message(STATUS "No local CUDA-capable GPUs found")
-      endif()
-  endif()
+      #if(_arch_res EQUAL 0)
+#        string(REGEX REPLACE "\n" ";" _arch_out "${_arch_out}")
+#        list(GET _arch_out -1 _local_arch)
+#        string(REGEX REPLACE " " ";" _local_arch "${_local_arch}")
+#        set(LOCAL_CUDA_ARCHITECTURES "${_local_arch}" CACHE STRING "Detected local GPUs for compilation")
+#        message(STATUS "Local CUDA architectures detected: ${LOCAL_CUDA_ARCHITECTURES}")
+#      else()
+#        set(LOCAL_CUDA_ARCHITECTURES "" CACHE STRING "Detected local GPUs for compilation")
+#        message(STATUS "No local CUDA-capable GPUs found")
+#      endif()
+#  endif()
 
   # Add flags to compile for local CUDA architectures
-  foreach(var ${LOCAL_CUDA_ARCHITECTURES})
-    list(APPEND CUDA_NVCC_FLAGS -gencode arch=compute_${var},code=sm_${var})
-  endforeach()
+  #foreach(var ${LOCAL_CUDA_ARCHITECTURES})
+    # list(APPEND CUDA_NVCC_FLAGS -gencode arch=compute_${var},code=compute_${var})
+    # list(APPEND CUDA_NVCC_FLAGS -rdc=true)
+  # endforeach()
 
-  cuda_include_directories(${DACE_RUNTIME_DIR}/include)
-  cuda_compile(DACE_CUDA_OBJECTS ${DACE_CUDA_FILES})
-  set(DACE_OBJECTS ${DACE_OBJECTS} ${DACE_CUDA_OBJECTS})
+  #set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+
+   # list(APPEND CUDA_NVCC_FLAGS "--compiler-options '-fPIC'" --shared --device-c -lmpi -lnvshmem_host -lnvshmem_device)
+
+#  set(CUDA_NVCC_FLAGS -gencode arch=compute_80,code=compute_80)
+
+  #cuda_include_directories(${DACE_RUNTIME_DIR}/include)
+
+  #find_package(NVSHMEM REQUIRED HINTS ${NVSHMEM_PREFIX}/lib/cmake/nvshmem)
+
+  find_package(NVSHMEM REQUIRED)
+  find_package(MPI REQUIRED)
+
+  list(APPEND DACE_LIBS nvshmem::nvshmem)
+  list(APPEND DACE_LIBS mpi)
+
+#  set(DACE_OBJECTS ${DACE_OBJECTS} ${DACE_CUDA_FILES})
+
+  # cuda_compile(DACE_CUDA_OBJECTS ${DACE_CUDA_FILES})
+  #set(DACE_OBJECTS ${DACE_OBJECTS} ${DACE_CUDA_OBJECTS})
 endif() # DACE_ENABLE_CUDA
 
 
@@ -579,8 +608,14 @@ endif()
 include("targets/mlir/mlir.cmake")
 
 # Create DaCe library file
-add_library(${DACE_PROGRAM_NAME} SHARED ${DACE_CPP_FILES} ${DACE_OBJECTS})
-target_link_libraries(${DACE_PROGRAM_NAME} ${DACE_LIBS})
+add_library(${DACE_PROGRAM_NAME} SHARED ${DACE_CPP_FILES} ${DACE_CUDA_FILES} ${DACE_OBJECTS})
+target_link_libraries(${DACE_PROGRAM_NAME} PUBLIC ${DACE_LIBS})
+
+set_target_properties(${DACE_PROGRAM_NAME}
+    PROPERTIES
+    CUDA_STANDARD 17
+    CUDA_SEPARABLE_COMPILATION ON
+)
 
 # Add additional required files
 if(DACE_ENABLE_INTELFPGA)
@@ -599,6 +634,7 @@ if(DACE_ENABLE_INTELFPGA)
                         DEPENDS ${DACE_PROGRAM_NAME}_hardware.aocx)
   endif()
 endif()
+
 if(DACE_ENABLE_XILINX)
   if(DACE_XILINX_MODE STREQUAL "software_emulation" AND DACE_FPGA_AUTOBUILD_BITSTREAM)
     add_custom_target(autobuild_bitstream ALL
@@ -619,7 +655,7 @@ endif()
 
 # Create DaCe loader stub
 add_library(dacestub_${DACE_PROGRAM_NAME} SHARED "${CMAKE_SOURCE_DIR}/tools/dacestub.cpp")
-target_link_libraries(dacestub_${DACE_PROGRAM_NAME} ${CMAKE_THREAD_LIBS_INIT} ${OpenMP_CXX_LIBRARIES})
+target_link_libraries(dacestub_${DACE_PROGRAM_NAME} ${CMAKE_THREAD_LIBS_INIT} ${OpenMP_CXX_LIBRARIES} ${CMAKE_DL_LIBS})
 
 # Windows-specific fixes
 if (MSVC_IDE)
