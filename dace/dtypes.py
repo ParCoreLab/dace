@@ -34,6 +34,10 @@ class StorageType(aenum.AutoNumberEnum):
     CPU_ThreadLocal = ()  #: Thread-local host memory
     GPU_Global = ()  #: GPU global memory
     GPU_Shared = ()  #: On-GPU shared memory
+
+    # This is not great. Maybe libraries should define their own storage types and allocation
+    # methods instead of defining them all here and having cuda.py handle each case separately.
+    GPU_NVSHMEM = ()  #: (CUDA only) NVSHMEM symmetric memory
     FPGA_Global = ()  #: Off-chip global memory (DRAM)
     FPGA_Local = ()  #: On-chip memory (bulk storage)
     FPGA_Registers = ()  #: On-chip memory (fully partitioned registers)

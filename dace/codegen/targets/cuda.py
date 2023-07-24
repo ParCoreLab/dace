@@ -104,7 +104,9 @@ class CUDACodeGen(TargetCodeGenerator):
 
         dispatcher.register_state_dispatcher(self, self.state_dispatch_predicate)
 
-        gpu_storage = [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_Shared, dtypes.StorageType.CPU_Pinned]
+        gpu_storage = [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_Shared, dtypes.StorageType.CPU_Pinned, dtypes.StorageType.GPU_NVSHMEM]
+        # gpu_storage = [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_Shared, dtypes.StorageType.CPU_Pinned]
+
         dispatcher.register_array_dispatcher(gpu_storage, self)
         dispatcher.register_array_dispatcher(dtypes.StorageType.CPU_Pinned, self)
 
@@ -487,8 +489,8 @@ DACE_EXPORTED void __dace_gpu_set_all_streams({sdfg.name}_t *__state, gpuStream_
             cuda_arch = [ca for ca in cuda_arch if ca is not None and len(ca) > 0]
 
             flags = Config.get("compiler", "cuda", "args")
-            flags += ' ' + ' '.join('-gencode arch=compute_{arch},code=sm_{arch}'.format(arch=arch)
-                                    for arch in cuda_arch)
+            # flags += ' ' + ' '.join('-gencode arch=compute_{arch},code=sm_{arch}'.format(arch=arch)
+            #                         for arch in cuda_arch)
 
             options.append("-DCUDA_NVCC_FLAGS=\"{}\"".format(flags))
 
@@ -601,6 +603,18 @@ DACE_EXPORTED void __dace_gpu_set_all_streams({sdfg.name}_t *__state, gpuStream_
                 result_alloc.write('DACE_GPU_CHECK(%sMemset(%s, 0, %s));\n' % (self.backend, dataname, arrsize_malloc))
             if isinstance(nodedesc, dt.Array) and nodedesc.start_offset != 0:
                 result_alloc.write(f'{dataname} += {cpp.sym2cpp(nodedesc.start_offset)};\n')
+
+        elif nodedesc.storage == dtypes.StorageType.GPU_NVSHMEM:
+            # No need for declaration with nvshmem_malloc
+            if not declared:
+                result_decl.write('%s %s;\n' % (ctypedef, dataname))
+            self._dispatcher.defined_vars.add(dataname, DefinedType.Pointer, ctypedef)
+
+            # No need for streams?
+            # Assume CUDA?
+            # Could support rocshmem in the future
+            result_alloc.write(f'{dataname} = ({nodedesc.dtype.ctype} *) nvshmem_malloc({arrsize_malloc});\n')
+
         elif nodedesc.storage == dtypes.StorageType.CPU_Pinned:
             if not declared:
                 result_decl.write('%s %s;\n' % (ctypedef, dataname))
@@ -728,6 +742,8 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
         if nodedesc.storage == dtypes.StorageType.GPU_Global:
             if not nodedesc.pool:  # If pooled, will be freed somewhere else
                 callsite_stream.write('DACE_GPU_CHECK(%sFree(%s));\n' % (self.backend, dataname), sdfg, state_id, node)
+        elif nodedesc.storage == dtypes.StorageType.GPU_NVSHMEM:
+            callsite_stream.write(f'nvshmem_free((void *){dataname});\n')
         elif nodedesc.storage == dtypes.StorageType.CPU_Pinned:
             callsite_stream.write('DACE_GPU_CHECK(%sFreeHost(%s));\n' % (self.backend, dataname), sdfg, state_id, node)
         elif nodedesc.storage == dtypes.StorageType.GPU_Shared or \
@@ -1325,6 +1341,9 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
                                                    skip_entry_node=skip_entry)
 
                 callsite_stream.write("}  // subgraph end", sdfg, state.node_id)
+
+            # if state.is_loop_guard:
+            #     callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
 
             callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
 
