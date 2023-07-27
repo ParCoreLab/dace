@@ -76,9 +76,10 @@ def validate_sdfg(sdfg: 'dace.sdfg.SDFG', references: Set[int] = None, **context
             if name is not None and not dtypes.validate_name(name):
                 raise InvalidSDFGError("Invalid array name %s" % name, sdfg, None)
             # Allocation lifetime checks
-            if (desc.lifetime is dtypes.AllocationLifetime.Persistent and desc.storage is dtypes.StorageType.Register):
+            if (desc.lifetime in (dtypes.AllocationLifetime.Persistent, dtypes.AllocationLifetime.External)
+                    and desc.storage == dtypes.StorageType.Register):
                 raise InvalidSDFGError(
-                    "Array %s cannot be both persistent and use Register as "
+                    "Array %s cannot be both persistent/external and use Register as "
                     "storage type. Please use a different storage location." % name, sdfg, None)
 
             # Check for valid bank assignments
@@ -320,7 +321,8 @@ def validate_state(state: 'dace.sdfg.SDFGState',
         raise InvalidSDFGError("Invalid state name", sdfg, state_id)
 
     if state._parent != sdfg:
-        raise InvalidSDFGError("State does not point to the correct " "parent", sdfg, state_id)
+        raise InvalidSDFGError("State does not point to the correct "
+                               "parent", sdfg, state_id)
 
     # Unreachable
     ########################################
@@ -560,6 +562,13 @@ def validate_state(state: 'dace.sdfg.SDFGState',
         src_node = path[0].src
         dst_node = path[-1].dst
 
+        # NestedSDFGs must connect to AccessNodes
+        if not e.data.is_empty():
+            if isinstance(src_node, nd.NestedSDFG) and not isinstance(dst_node, nd.AccessNode):
+                raise InvalidSDFGEdgeError("Nested SDFG source nodes must be AccessNodes", sdfg, state_id, eid)
+            if isinstance(dst_node, nd.NestedSDFG) and not isinstance(src_node, nd.AccessNode):
+                raise InvalidSDFGEdgeError("Nested SDFG destination nodes must be AccessNodes", sdfg, state_id, eid)
+
         # Set up memlet-specific SDFG context
         memlet_context = copy.copy(context)
         for pe in path:
@@ -736,6 +745,7 @@ def validate_state(state: 'dace.sdfg.SDFGState',
 
 class InvalidSDFGError(Exception):
     """ A class of exceptions thrown when SDFG validation fails. """
+
     def __init__(self, message: str, sdfg: 'SDFG', state_id: int):
         self.message = message
         self.sdfg = sdfg
@@ -759,7 +769,8 @@ class InvalidSDFGError(Exception):
 
         if lineinfo.start_line >= 0:
             if lineinfo.start_column > 0:
-                return (f'File "{lineinfo.filename}", line {lineinfo.start_line}, ' f'column {lineinfo.start_column}')
+                return (f'File "{lineinfo.filename}", line {lineinfo.start_line}, '
+                        f'column {lineinfo.start_column}')
             return f'File "{lineinfo.filename}", line {lineinfo.start_line}'
 
         return f'File "{lineinfo.filename}"'
@@ -790,6 +801,7 @@ class InvalidSDFGError(Exception):
 
 class InvalidSDFGInterstateEdgeError(InvalidSDFGError):
     """ Exceptions of invalid inter-state edges in an SDFG. """
+
     def __init__(self, message: str, sdfg: 'SDFG', edge_id: int):
         self.message = message
         self.sdfg = sdfg
@@ -835,6 +847,7 @@ class InvalidSDFGInterstateEdgeError(InvalidSDFGError):
 
 class InvalidSDFGNodeError(InvalidSDFGError):
     """ Exceptions of invalid nodes in an SDFG state. """
+
     def __init__(self, message: str, sdfg: 'SDFG', state_id: int, node_id: int):
         self.message = message
         self.sdfg = sdfg
@@ -872,12 +885,14 @@ class NodeNotExpandedError(InvalidSDFGNodeError):
     Exception that is raised whenever a library node was not expanded
     before code generation.
     """
+
     def __init__(self, sdfg: 'SDFG', state_id: int, node_id: int):
         super().__init__('Library node not expanded', sdfg, state_id, node_id)
 
 
 class InvalidSDFGEdgeError(InvalidSDFGError):
     """ Exceptions of invalid edges in an SDFG state. """
+
     def __init__(self, message: str, sdfg: 'SDFG', state_id: int, edge_id: int):
         self.message = message
         self.sdfg = sdfg

@@ -45,6 +45,7 @@ RankType = Union[Integral, str, symbolic.symbol, symbolic.SymExpr, symbolic.symp
 if TYPE_CHECKING:
     from dace.codegen.instrumentation.report import InstrumentationReport
     from dace.codegen.instrumentation.data.data_report import InstrumentedDataReport
+    from dace.codegen.compiled_sdfg import CompiledSDFG
 
 
 def _arrays_to_json(arrays):
@@ -291,7 +292,19 @@ class InterstateEdge(object):
         else:
             alltypes = symbols
 
-        return {k: infer_expr_type(v, alltypes) for k, v in self.assignments.items()}
+        inferred_lhs_symbols = {k: infer_expr_type(v, alltypes) for k, v in self.assignments.items()}
+    
+        # Symbols in assignment keys are candidate newly defined symbols
+        lhs_symbols = set()
+        # Symbols already defined
+        rhs_symbols = set()
+        for lhs, rhs in self.assignments.items():
+            rhs_symbols |= symbolic.free_symbols_and_functions(rhs)
+            # Only add LHS to the set of candidate newly defined symbols if it has not been defined yet
+            if lhs not in rhs_symbols:
+                lhs_symbols.add(lhs)
+        
+        return {k: v for k, v in inferred_lhs_symbols.items() if k in lhs_symbols}
 
     def get_read_memlets(self, arrays: Dict[str, dt.Data]) -> List[mm.Memlet]:
         """
@@ -2189,8 +2202,7 @@ class SDFG(OrderedDiGraph[SDFGState, InterstateEdge]):
         dll = cs.ReloadableDLL(binary_filename, self.name)
         return dll.is_loaded()
 
-    def compile(self, output_file=None, validate=True) -> \
-            'dace.codegen.compiler.CompiledSDFG':
+    def compile(self, output_file=None, validate=True) -> 'CompiledSDFG':
         """ Compiles a runnable binary from this SDFG.
 
             :param output_file: If not None, copies the output library file to
