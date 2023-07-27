@@ -1,72 +1,42 @@
 import dace
+from dace import SDFG, SDFGState, dtypes, Memlet
+from dace.frontend.python.replacements import _define_local_scalar
+
+from functools import partial
 
 
-def MPI_DDT(dtype):
-    mpi_dtype_str = "MPI_BYTE"
-    if dtype == dace.dtypes.float32:
-        mpi_dtype_str = "MPI_FLOAT"
-    elif dtype == dace.dtypes.float64:
-        mpi_dtype_str = "MPI_DOUBLE"
-    elif dtype == dace.dtypes.complex64:
-        mpi_dtype_str = "MPI_COMPLEX"
-    elif dtype == dace.dtypes.complex128:
-        mpi_dtype_str = "MPI_COMPLEX_DOUBLE"
-    elif dtype == dace.dtypes.int16:
-        mpi_dtype_str = "MPI_SHORT"
-    elif dtype == dace.dtypes.int32:
-        mpi_dtype_str = "MPI_INT"
-    elif dtype == dace.dtypes.int64:
-        mpi_dtype_str = "MPI_LONG_LONG"
-    elif dtype == dace.dtypes.uint16:
-        mpi_dtype_str = "MPI_UNSIGNED_SHORT"
-    elif dtype == dace.dtypes.uint32:
-        mpi_dtype_str = "MPI_UNSIGNED"
-    elif dtype == dace.dtypes.uint64:
-        mpi_dtype_str = "MPI_UNSIGNED_LONG_LONG"
+def _add_edge(libnode, pv, sdfg: SDFG, state: SDFGState, array: str, var_name: str, write=False, pointer=True):
+    array_range, array_node = None, None
+    if isinstance(array, tuple):
+        array_name, array_range = array
+        array = sdfg.arrays[array_name]
+        array_mem = Memlet.simple(array_name, array_range)
+    elif isinstance(array, str):
+        array_name = array
+        array = sdfg.arrays[array_name]
+        array_mem = Memlet.from_array(array_name, array)
     else:
-        raise ValueError("DDT of " + str(dtype) + " not supported yet.")
-    return mpi_dtype_str
+        storage = dtypes.StorageType.GPU_Global
+        array_name = _define_local_scalar(pv, sdfg, state, dace.int32, storage)
+        array_node = state.add_access(array_name)
+        array_tasklet = state.add_tasklet('_set_dst_', {}, {'__out'}, '__out = {}'.format(array))
+        state.add_edge(array_tasklet, '__out', array_node, None, Memlet.simple(array_name, '0'))
+        array_mem = Memlet.simple(array_name, '0')
+
+    # Not very clean
+    if array_node is None:
+        array_node = (state.add_write if write else state.add_read)(array_name)
+
+    conn = libnode.out_connectors if write else libnode.in_connectors
+
+    if pointer:
+        conn[var_name] = dtypes.pointer(array.dtype)
+
+    if write:
+        state.add_edge(libnode, var_name, array_node, None, array_mem)
+    else:
+        state.add_edge(array_node, None, libnode, var_name, array_mem)
 
 
-def is_access_contiguous(memlet, data):
-    if memlet.other_subset is not None:
-        raise ValueError("Other subset must be None, reshape in send not supported")
-    # to be contiguous, in every dimension the memlet range must have the same size
-    # than the data, except in the last dim, iff all other dims are only one element
-
-    matching = []
-    single = []
-    for m, d in zip(memlet.subset.size_exact(), data.sizes()):
-        if (str(m) == str(d)):
-            matching.append(True)
-        else:
-            matching.append(False)
-        if (m == 1):
-            single.append(True)
-        else:
-            single.append(False)
-
-    # if all dims are matching we are contiguous
-    if all(x is True for x in matching):
-        return True
-
-    # remove last dim, check if all remaining access a single dim
-    matching = matching[:-1]
-    single = single[:-1]
-    if all(x is True for x in single):
-        return True
-
-    return False
-
-
-def create_vector_ddt(memlet, data):
-    if is_access_contiguous(memlet, data):
-        return None
-    if len(data.shape) != 2:
-        raise ValueError("Dimensionality of access not supported atm.")
-    ddt = dict()
-    ddt["blocklen"] = str(memlet.subset.size_exact()[-1])
-    ddt["oldtype"] = str(MPI_DDT(data.dtype))
-    ddt["count"] = "(" + str(memlet.subset.num_elements_exact()) + ")" + "/" + str(ddt['blocklen'])
-    ddt["stride"] = str(data.strides[0])
-    return ddt
+def make_edge(libnode, pv, sdfg: SDFG, state: SDFGState):
+    return partial(_add_edge, libnode=libnode, pv=pv, sdfg=sdfg, state=state)
