@@ -15,7 +15,7 @@ ProgramVisitor = 'dace.frontend.python.newast.ProgramVisitor'
 
 
 @dace.library.expansion
-class ExpandIsendNVSHMEM(ExpandTransformation):
+class ExpandPutmemNVSHMEM(ExpandTransformation):
     environments = [environments.nvshmem.NVSHMEM]
 
     @staticmethod
@@ -50,10 +50,10 @@ class ExpandIsendNVSHMEM(ExpandTransformation):
 
 
 @dace.library.node
-class Isend(NVSHMEMNode):
+class Putmem(NVSHMEMNode):
     # Global properties
     implementations = {
-        "NVSHMEM": ExpandIsendNVSHMEM,
+        "NVSHMEM": ExpandPutmemNVSHMEM,
     }
     default_implementation = "NVSHMEM"
 
@@ -99,9 +99,9 @@ class Isend(NVSHMEMNode):
         return dest, source, count_str, pe
 
 
-@oprepo.replaces('dace.libraries.nvshmem.Isend')
-def _isend(pv: ProgramVisitor, sdfg: SDFG, state: SDFGState, dest: str, source: str, pe: Union[str, sp.Expr, Number]):
-    libnode = Isend('_Isend_')
+@oprepo.replaces('dace.libraries.nvshmem.Putmem')
+def _putmem(pv: ProgramVisitor, sdfg: SDFG, state: SDFGState, dest: str, source: str, pe: Union[str, sp.Expr, Number]):
+    libnode = Putmem('_Putmem_')
 
     edge_maker = utils.make_edge(libnode=libnode, pv=pv, sdfg=sdfg, state=state)
 

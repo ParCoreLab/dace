@@ -290,11 +290,11 @@ if(DACE_ENABLE_CUDA)
 
   #find_package(NVSHMEM REQUIRED HINTS ${NVSHMEM_PREFIX}/lib/cmake/nvshmem)
 
-  find_package(NVSHMEM REQUIRED)
-  find_package(MPI REQUIRED)
+  #find_package(NVSHMEM REQUIRED)
+  #find_package(MPI REQUIRED)
 
-  list(APPEND DACE_LIBS nvshmem::nvshmem)
-  list(APPEND DACE_LIBS mpi)
+  #list(APPEND DACE_LIBS nvshmem::nvshmem)
+  #list(APPEND DACE_LIBS mpi)
 
 #  set(DACE_OBJECTS ${DACE_OBJECTS} ${DACE_CUDA_FILES})
 
