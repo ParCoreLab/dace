@@ -20,7 +20,9 @@ class ExpandPutmemNVSHMEM(ExpandTransformation):
 
     @staticmethod
     def expansion(node, parent_state, parent_sdfg, n=None, **kwargs):
-        dest, source, count_str, pe = node.validate(parent_sdfg, parent_state)
+        dest, _, count_str, _ = node.validate(parent_sdfg, parent_state)
+
+        # nvshmem_putmem_TYPE?
         dtype_dest = dest.dtype.base_type
 
         if dtype_dest.dtype.veclen > 1:
@@ -63,38 +65,18 @@ class Putmem(NVSHMEMNode):
     nosync = dace.properties.Property(dtype=bool, default=False, desc="Do not sync if memory is on GPU")
 
     def __init__(self, name, *args, **kwargs):
-        super().__init__(name, *args, inputs={"_source", "_pe"}, outputs={"_dest"}, **kwargs)
+        super().__init__(name, *args, inputs={"_source", "_pe"}, outputs={"_dest"}, _count_label='_dest', **kwargs)
 
     def validate(self, sdfg, state):
         """
         :return: dest, source, count_str, pe
         """
+        labels = super().validate(sdfg, state)
+        dest, source, count_str, pe = labels['_dest'], labels['_source'], labels[NVSHMEMNode.count_key], labels['_pe']
 
-        dest, source, pe = None, None, None
-
-        for e in state.in_edges(self):
-            if e.dst_conn == "_source":
-                source = sdfg.arrays[e.data.data]
-            if e.dst_conn == "_pe":
-                pe = sdfg.arrays[e.data.data]
-
-        for e in state.out_edges(self):
-            if e.src_conn == '_dest':
-                dest = sdfg.arrays[e.data.data]
-                dims = [str(d) for d in e.data.subset.size_exact()]
-                count_str = "*".join(dims)
-                break
-        else:
-            raise ValueError("_dest not found")
-
-        if pe.dtype.base_type != dace.dtypes.int32:
-            raise ValueError("PE must be an integer!")
-
-        for e in state.out_edges(self):
-            if e.src_conn in ['_dest']:
-                dims = [str(d) for d in e.data.subset.size_exact()]
-                count_str = "*".join(dims)
-                break
+        # Not really necessary?
+        if dest.dtype != source.dtype:
+            raise ValueError("Dest and Source must be the same type")
 
         return dest, source, count_str, pe
 
