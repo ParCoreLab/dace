@@ -4383,7 +4383,7 @@ class ProgramVisitor(ExtNodeVisitor):
         # and we pass instead the array names and the ranges accessed.
         # The replacement functions are responsible for generating the correct
         # subgraph/memlets.
-        if funcname.startswith("dace.comm"):
+        if funcname.startswith("dace.comm") or 'nvshmem' in funcname:
             mpi_args = []
             for arg in node.args:
                 # We are only looking for subscripts on arrays of the current SDFG.
