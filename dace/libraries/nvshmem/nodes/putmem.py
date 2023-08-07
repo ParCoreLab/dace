@@ -3,7 +3,7 @@ import dace.properties
 import dace.sdfg.nodes
 from dace.transformation.transformation import ExpandTransformation
 from .. import environments
-from dace import SDFG, SDFGState
+from dace import SDFG, SDFGState, dtypes
 from dace.libraries.nvshmem.nodes.node import NVSHMEMNode
 from typing import Union
 from numbers import Number
@@ -85,7 +85,8 @@ class Putmem(NVSHMEMNode):
 def _putmem(pv: ProgramVisitor, sdfg: SDFG, state: SDFGState, dest: str, source: str, pe: Union[str, sp.Expr, Number]):
     libnode = Putmem('_Putmem_')
 
-    edge_maker = utils.make_edge(libnode=libnode, pv=pv, sdfg=sdfg, state=state)
+    edge_maker = utils.make_edge(libnode=libnode, pv=pv, sdfg=sdfg, state=state,
+                                 storage_type=dtypes.StorageType.GPU_NVSHMEM)
 
     edge_maker(array=dest, var_name="_dest", write=True, pointer=True)
     edge_maker(array=source, var_name="_source", write=False, pointer=True)
