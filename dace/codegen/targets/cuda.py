@@ -906,7 +906,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
         cpu_storage_types = [
             dtypes.StorageType.CPU_Heap, dtypes.StorageType.CPU_ThreadLocal, dtypes.StorageType.CPU_Pinned
         ]
-        gpu_storage_types = [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_Shared]
+        gpu_storage_types = [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_Shared, dtypes.StorageType.GPU_NVSHMEM]
 
         copy_shape = memlet.subset.bounding_box_size()
         copy_shape = [symbolic.overapproximate(s) for s in copy_shape]
@@ -920,11 +920,11 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
 
         if (isinstance(src_node, nodes.AccessNode) and isinstance(dst_node, nodes.AccessNode)
                 and not CUDACodeGen._in_device_code
-                and (src_storage in [dtypes.StorageType.GPU_Global, dtypes.StorageType.CPU_Pinned]
-                     or dst_storage in [dtypes.StorageType.GPU_Global, dtypes.StorageType.CPU_Pinned])
+                and (src_storage in [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_NVSHMEM, dtypes.StorageType.CPU_Pinned]
+                     or dst_storage in [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_NVSHMEM, dtypes.StorageType.CPU_Pinned])
                 and not (src_storage in cpu_storage_types and dst_storage in cpu_storage_types)):
-            src_location = 'Device' if src_storage == dtypes.StorageType.GPU_Global else 'Host'
-            dst_location = 'Device' if dst_storage == dtypes.StorageType.GPU_Global else 'Host'
+            src_location = 'Device' if src_storage in [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_NVSHMEM] else 'Host'
+            dst_location = 'Device' if dst_storage in [dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_NVSHMEM] else 'Host'
 
             # Corner case: A stream is writing to an array
             if (isinstance(sdfg.arrays[src_node.data], dt.Stream) and isinstance(sdfg.arrays[dst_node.data],
