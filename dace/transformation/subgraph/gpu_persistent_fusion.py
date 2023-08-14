@@ -298,6 +298,7 @@ class GPUPersistentKernel(SubgraphTransformation):
         gpu_accessible = [
             StorageType.GPU_Global,
             StorageType.GPU_Shared,
+            StorageType.GPU_NVSHMEM,
             StorageType.CPU_Pinned,
             StorageType.Register,
         ]

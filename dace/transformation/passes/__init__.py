@@ -5,6 +5,7 @@ from .constant_propagation import ConstantPropagation
 from .dead_dataflow_elimination import DeadDataflowElimination
 from .dead_state_elimination import DeadStateElimination
 from .fusion_inline import FuseStates, InlineSDFGs
+from .nvshmem_arrays import NVSHMEMArray
 from .optional_arrays import OptionalArrayInference
 from .pattern_matching import PatternMatchAndApply, PatternMatchAndApplyRepeated, PatternApplyOnceEverywhere
 from .prune_symbols import RemoveUnusedSymbols

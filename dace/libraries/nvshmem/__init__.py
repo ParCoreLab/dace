@@ -5,3 +5,5 @@ from .environments import *
 from .utils import *
 
 register_library(__name__, "nvshmem")
+
+from .nodes.node import NVSHMEMNode
