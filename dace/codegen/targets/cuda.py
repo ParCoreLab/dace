@@ -1321,7 +1321,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
             components = dace.sdfg.concurrent_subgraphs(state)
             for c in components:
 
-                has_map = any(isinstance(node, dace.nodes.MapEntry) for node in c.nodes())
+                has_map = any(isinstance(node, dace.nodes.MapEntry) for node, _ in c.all_nodes_recursive())
                 # If a global is modified, execute once per global state,
                 # if a shared memory element is modified, execute once per block,
                 # if a local scalar is modified, execute in every thread.
