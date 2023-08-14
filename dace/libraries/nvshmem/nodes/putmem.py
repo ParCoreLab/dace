@@ -30,12 +30,6 @@ class ExpandPutmemNVSHMEM(ExpandTransformation):
 
         code = ""
 
-        # Might need it later
-        # if not node.nosync and buffer.storage == dtypes.StorageType.GPU_Global:
-        #     code += f"""
-        #     cudaStreamSynchronize(__dace_current_stream);
-        #     """
-
         # in bytes
         nelems = f'({count_str}) * sizeof({dtype_dest})'
 
@@ -51,13 +45,117 @@ class ExpandPutmemNVSHMEM(ExpandTransformation):
         return tasklet
 
 
+@dace.library.expansion
+class ExpandPutmem_blockNVSHMEM(ExpandTransformation):
+    environments = [environments.nvshmem.NVSHMEM]
+
+    @staticmethod
+    def expansion(node, parent_state, parent_sdfg, n=None, **kwargs):
+        dest, _, count_str, _ = node.validate(parent_sdfg, parent_state)
+
+        dtype_dest = dest.dtype.base_type
+
+        if dtype_dest.dtype.veclen > 1:
+            raise NotImplementedError
+
+        code = ""
+
+        # in bytes
+        nelems = f'({count_str}) * sizeof({dtype_dest})'
+
+        code += f"nvshmemx_putmem_block(_dest, _source, {nelems}, _pe);"
+
+        tasklet = dace.sdfg.nodes.Tasklet(node.name,
+                                          node.in_connectors,
+                                          node.out_connectors,
+                                          code,
+                                          language=dace.dtypes.Language.CPP,
+                                          side_effects=True)
+
+        return tasklet
+
+
+@dace.library.expansion
+class ExpandPutmemTaskletNVSHMEM(ExpandTransformation):
+    environments = [environments.nvshmem.NVSHMEM]
+
+    @staticmethod
+    def expansion(node, parent_state, parent_sdfg, n=None, **kwargs):
+        dest, source, count_str, pe = node.validate(parent_sdfg, parent_state)
+        dtype_dest = dest.dtype
+
+        # node.schedule = dace.ScheduleType.GPU_ThreadBlock_Dynamic
+
+
+        sdfg = dace.SDFG("{l}_sdfg".format(l=node.label))
+        state = sdfg.add_state("{l}_state".format(l=node.label))
+
+        sdfg.add_array('_dest', dest.shape, dtype=dest.dtype, strides=dest.strides)
+        sdfg.add_array('_source', source.shape, dtype=source.dtype, strides=source.strides)
+        sdfg.add_array('_pe', pe.shape, dtype=pe.dtype, strides=pe.strides)
+
+        code = ""
+
+        nelems = f'({count_str}) * sizeof({dtype_dest})'
+        code += f"nvshmem_putmem(_dest, _source, {nelems}, _pe);"
+
+        _, me, mx = state.add_mapped_tasklet('_nvshmem_putmem_',
+                                             dict(__i="0:1"),
+                                             {},
+                                             code,
+                                             {},
+                                             # schedule=dace.ScheduleType.GPU_ThreadBlock,
+                                             language=dtypes.Language.CPP,
+                                             external_edges=True)
+
+        return sdfg
+
+
+@dace.library.expansion
+class ExpandPutTaskletNVSHMEM(ExpandTransformation):
+    environments = [environments.nvshmem.NVSHMEM]
+
+    @staticmethod
+    def expansion(node, parent_state, parent_sdfg, n=None, **kwargs):
+        dest, source, count_str, pe = node.validate(parent_sdfg, parent_state)
+        dtype_dest = dest.dtype
+
+        sdfg = dace.SDFG("{l}_sdfg".format(l=node.label))
+        state = sdfg.add_state("{l}_state".format(l=node.label))
+
+        sdfg.add_array('_dest', dest.shape, dtype=dest.dtype, strides=dest.strides)
+        sdfg.add_array('_source', source.shape, dtype=source.dtype, strides=source.strides)
+        sdfg.add_array('_pe', pe.shape, dtype=pe.dtype, strides=pe.strides)
+
+        code = ""
+
+        code += f"nvshmem_{dtype_dest}_p(&_dest[__i], _source[__i], _pe);"
+
+        _, me, mx = state.add_mapped_tasklet('_nvshmem_p_',
+                                             dict(__i=f'0:{count_str}'),
+                                             {},
+                                             code,
+                                             {},
+                                             language=dtypes.Language.CPP,
+                                             external_edges=True)
+
+        return sdfg
+
+
 @dace.library.node
 class Putmem(NVSHMEMNode):
     # Global properties
     implementations = {
-        "NVSHMEM": ExpandPutmemNVSHMEM,
+        'putmem': ExpandPutmemNVSHMEM,
+        'putmem_block': ExpandPutmem_blockNVSHMEM,
+
+        'putmem_tasklet': ExpandPutmemTaskletNVSHMEM,
+
+        'put_tasklet': ExpandPutTaskletNVSHMEM
     }
-    default_implementation = "NVSHMEM"
+
+    # putmem_block needs to be in a cooperative block
+    default_implementation = 'putmem'
 
     # Object fields
     n = dace.properties.SymbolicProperty(allow_none=True, default=None)
