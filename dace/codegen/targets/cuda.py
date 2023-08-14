@@ -1366,11 +1366,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
                                                    skip_entry_node=skip_entry)
 
                 callsite_stream.write("}  // subgraph end", sdfg, state.node_id)
-
-            # if state.is_loop_guard:
-            #     callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
-
-            callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
+                callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
 
             # done here, code is generated
             return
