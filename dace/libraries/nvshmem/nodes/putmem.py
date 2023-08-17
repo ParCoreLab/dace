@@ -3,7 +3,7 @@ import dace.properties
 import dace.sdfg.nodes
 from dace.transformation.transformation import ExpandTransformation
 from .. import environments
-from dace import SDFG, SDFGState, dtypes
+from dace import SDFG, SDFGState, dtypes, Memlet
 from dace.libraries.nvshmem.nodes.node import NVSHMEMNode
 from typing import Union
 from numbers import Number
@@ -123,19 +123,24 @@ class ExpandPutTaskletNVSHMEM(ExpandTransformation):
         sdfg = dace.SDFG("{l}_sdfg".format(l=node.label))
         state = sdfg.add_state("{l}_state".format(l=node.label))
 
-        sdfg.add_array('_dest', dest.shape, dtype=dest.dtype, strides=dest.strides)
+        sdfg.add_array('_dest', dest.shape, dtype=dtypes.pointer(dest.dtype), strides=dest.strides)
         sdfg.add_array('_source', source.shape, dtype=source.dtype, strides=source.strides)
-        sdfg.add_array('_pe', pe.shape, dtype=pe.dtype, strides=pe.strides)
+        sdfg.add_scalar('_pe', pe.dtype, transient=False)
 
         code = ""
 
-        code += f"nvshmem_{dtype_dest}_p(&_dest[__i], _source[__i], _pe);"
+        code += f"nvshmem_{dtype_dest}_p(__dest, __source, __pe);"
 
         _, me, mx = state.add_mapped_tasklet('_nvshmem_p_',
                                              dict(__i=f'0:{count_str}'),
-                                             {},
+                                             {
+                                                 '__source': Memlet('_source[__i]'),
+                                                 '__pe': Memlet.simple('_pe', '0'),
+                                             },
                                              code,
-                                             {},
+                                             {
+                                                 '__dest': Memlet('_dest[__i]')
+                                             },
                                              language=dtypes.Language.CPP,
                                              external_edges=True)
 
@@ -155,7 +160,8 @@ class Putmem(NVSHMEMNode):
     }
 
     # putmem_block needs to be in a cooperative block
-    default_implementation = 'putmem'
+    default_implementation = 'put_tasklet'  # Magically works with 1 GPU
+    # default_implementation = 'putmem'
 
     # Object fields
     n = dace.properties.SymbolicProperty(allow_none=True, default=None)
