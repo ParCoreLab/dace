@@ -1330,7 +1330,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
 
                     # The order of the branching below matters - it reduces the scope with every detected write
                     write_scope = 'thread'  # General case acts in every thread
-                    if any(sdfg.arrays[n.data].storage in (dtypes.StorageType.GPU_Global, dtypes.StorageType.CPU_Pinned)
+                    if any(sdfg.arrays[n.data].storage in (dtypes.StorageType.GPU_Global, dtypes.StorageType.GPU_NVSHMEM, dtypes.StorageType.CPU_Pinned)
                            for n in written_nodes):
                         write_scope = 'grid'
                     if any(sdfg.arrays[n.data].storage == dtypes.StorageType.GPU_Shared for n in written_nodes):
