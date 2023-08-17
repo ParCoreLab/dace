@@ -86,7 +86,6 @@ class ExpandPutmemTaskletNVSHMEM(ExpandTransformation):
 
         # node.schedule = dace.ScheduleType.GPU_ThreadBlock_Dynamic
 
-
         sdfg = dace.SDFG("{l}_sdfg".format(l=node.label))
         state = sdfg.add_state("{l}_state".format(l=node.label))
 
@@ -170,6 +169,9 @@ class Putmem(NVSHMEMNode):
 
     def __init__(self, name, *args, **kwargs):
         super().__init__(name, *args, inputs={"_source", "_pe"}, outputs={"_dest"}, _count_label='_dest', **kwargs)
+
+        # self.schedule = dtypes.ScheduleType.GPU_Default
+        self.schedule = dtypes.ScheduleType.GPU_Persistent
 
     def validate(self, sdfg, state):
         """
