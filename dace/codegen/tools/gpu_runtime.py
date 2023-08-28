@@ -19,6 +19,7 @@ class GPURuntime:
         self._geterrorstring = getattr(self.library, f'{self.backend}GetErrorString')
         self._geterrorstring.restype = ctypes.c_char_p
         self._getlasterror = getattr(self.library, f'{self.backend}GetLastError')
+        self._setdevice = getattr(self.library, f'{self.backend}SetDevice')
 
     def get_error_string(self, err: int) -> str:
         # Obtain the error string
@@ -34,3 +35,6 @@ class GPURuntime:
 
         # Obtain the error string
         return self.get_error_string(res)
+
+    def set_device(self, device: int) -> int:
+        return self._setdevice(device)
