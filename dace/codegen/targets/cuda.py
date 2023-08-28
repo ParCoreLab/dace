@@ -1363,7 +1363,8 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
                                                    sdfg.node_id(state),
                                                    function_stream,
                                                    callsite_stream,
-                                                   skip_entry_node=skip_entry)
+                                                   skip_entry_node=skip_entry,
+                                                   same_entry=comp_same_entry)
 
                 callsite_stream.write("}  // subgraph end", sdfg, state.node_id)
                 callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)

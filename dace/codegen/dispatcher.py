@@ -365,7 +365,8 @@ class TargetDispatcher(object):
                           function_stream,
                           callsite_stream,
                           skip_entry_node=False,
-                          skip_exit_node=False):
+                          skip_exit_node=False,
+                          same_entry=None):
         """ Dispatches a code generator for a scope subgraph of an
             `SDFGState`. """
 
@@ -375,8 +376,11 @@ class TargetDispatcher(object):
         nodes_to_skip = set()
 
         if skip_entry_node:
-            assert len(start_nodes) == 1
-            nodes_to_skip.add(start_nodes[0])
+            # assert len(start_nodes) == 1
+            if same_entry is not None:
+                nodes_to_skip.update(same_entry)
+            else:
+                nodes_to_skip.add(start_nodes[0])
 
         if skip_exit_node:
             exit_node = dfg.exit_node(start_nodes[0])
