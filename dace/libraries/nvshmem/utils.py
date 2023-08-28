@@ -4,6 +4,8 @@ from dace.frontend.python.replacements import _define_local_scalar
 
 from functools import partial
 
+NVSHMEM_SIGNAL_TYPE = dace.dtypes.uint64
+
 
 def _add_edge(libnode, pv, sdfg: SDFG, state: SDFGState, storage_type: dtypes.StorageType,
               array: str, var_name: str, write=False, pointer=True):
@@ -38,11 +40,16 @@ def _add_edge(libnode, pv, sdfg: SDFG, state: SDFGState, storage_type: dtypes.St
         conn[var_name] = dtypes.pointer(array.dtype)
 
     if write:
-        state.add_edge(libnode, var_name, array_node, None, array_mem)
+        return state.add_edge(libnode, var_name, array_node, None, array_mem)
     else:
-        state.add_edge(array_node, None, libnode, var_name, array_mem)
+        return state.add_edge(array_node, None, libnode, var_name, array_mem)
 
 
 def make_edge(libnode, pv, sdfg: SDFG, state: SDFGState,
               storage_type: dtypes.StorageType = dtypes.StorageType.GPU_Global):
     return partial(_add_edge, libnode=libnode, pv=pv, sdfg=sdfg, state=state, storage_type=storage_type)
+
+
+def check_signal_type(sig):
+    if sig.dtype != NVSHMEM_SIGNAL_TYPE:
+        raise ValueError('NVSHMEM Signals must be uint64_t')
