@@ -122,7 +122,7 @@ class ExpandPutTaskletNVSHMEM(ExpandTransformation):
         sdfg = dace.SDFG("{l}_sdfg".format(l=node.label))
         state = sdfg.add_state("{l}_state".format(l=node.label))
 
-        sdfg.add_array('_dest', dest.shape, dtype=dtypes.pointer(dest.dtype), strides=dest.strides)
+        sdfg.add_array('_dest', dest.shape, dtype=dest.dtype, strides=dest.strides)
         sdfg.add_array('_source', source.shape, dtype=source.dtype, strides=source.strides)
         sdfg.add_scalar('_pe', pe.dtype, transient=False)
 
@@ -130,7 +130,7 @@ class ExpandPutTaskletNVSHMEM(ExpandTransformation):
 
         code += f"nvshmem_{dtype_dest}_p(__dest, __source, __pe);"
 
-        _, me, mx = state.add_mapped_tasklet('_nvshmem_p_',
+        tasklet, me, mx = state.add_mapped_tasklet('_nvshmem_p_',
                                              dict(__i=f'0:{count_str}'),
                                              {
                                                  '__source': Memlet('_source[__i]'),
@@ -142,6 +142,8 @@ class ExpandPutTaskletNVSHMEM(ExpandTransformation):
                                              },
                                              language=dtypes.Language.CPP,
                                              external_edges=True)
+
+        tasklet.out_connectors['__dest'] = dace.pointer(dest.dtype)
 
         return sdfg
 
