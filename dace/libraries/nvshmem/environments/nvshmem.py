@@ -30,14 +30,10 @@ class NVSHMEM:
             printf("MPI is initialized already\\n");
         }
 
-        int rank, ndevices;
-
         nvshmemx_init_attr_t attr;
         MPI_Comm comm = MPI_COMM_WORLD;
         attr.mpi_comm = &comm;
 
-        cudaGetDeviceCount(&ndevices);
-        cudaSetDevice(rank % ndevices);
         nvshmemx_init_attr(NVSHMEMX_INIT_WITH_MPI_COMM, &attr);
     """
     finalize_code = """
