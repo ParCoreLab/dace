@@ -1,6 +1,6 @@
 # Copyright 2019-2021 ETH Zurich and the DaCe authors. All rights reserved.
 """ Contains classes that implement the trivial-map-elimination transformation. """
-
+import dace.dtypes
 from dace.sdfg import nodes
 from dace.sdfg import utils as sdutil
 from dace.transformation import transformation
@@ -25,6 +25,10 @@ class TrivialMapElimination(transformation.SingleStateTransformation):
 
     def can_be_applied(self, graph, expr_index, sdfg, permissive=False):
         map_entry = self.map_entry
+
+        if map_entry.schedule is dace.dtypes.ScheduleType.GPU_Persistent and 'launch' in map_entry.label:
+            return False
+
         return any(r[0] == r[1] for r in map_entry.map.range)
 
     def apply(self, graph, sdfg):
