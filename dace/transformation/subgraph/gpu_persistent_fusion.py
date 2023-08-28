@@ -208,6 +208,12 @@ class GPUPersistentKernel(SubgraphTransformation):
         other_data = set(node.data for state in other_states for node in state.nodes()
                          if isinstance(node, nodes.AccessNode))
 
+        # Add code->code scalars as kernel data
+        for state in kernel_sdfg.nodes():
+            for edge in state.edges():
+                if (isinstance(edge.src, dace.nodes.CodeNode) and isinstance(edge.dst, dace.nodes.CodeNode) and not edge.data.is_empty()):
+                    kernel_data.add(edge.data.data)
+
         # move Streams and Register data into the nested SDFG
         # normal data will be added as kernel argument
         kernel_args = []
