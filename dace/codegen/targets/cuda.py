@@ -1370,6 +1370,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
                 callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
 
             # done here, code is generated
+            # callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
             return
 
         self._frame.generate_state(sdfg, state, function_stream, callsite_stream)

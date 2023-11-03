@@ -739,10 +739,18 @@ class CPUCodeGen(TargetCodeGenerator):
             if memlet.wcr is not None:
                 nc = not cpp.is_write_conflicted(dfg, edge, sdfg_schedule=self._toplevel_schedule)
             if nc:
+                device_level = is_devicelevel_gpu(sdfg, state_dfg, src_node)
+
+                if device_level:
+                    stream.write("__gbar.Sync();")
+                    # stream.write("if (blockIdx.x == 0 && threadIdx.x == 0) {")
+
                 stream.write(
                     """
-                    dace::CopyND{copy_tmpl}::{shape_tmpl}::{copy_func}(
+                    dace::{prefix}CopyND{copy_tmpl}::{shape_tmpl}::{copy_func}(
                         {copy_args});""".format(
+                        prefix="Device" if device_level else "",
+                        # prefix="" if device_level else "",
                         copy_tmpl=copy_tmpl,
                         shape_tmpl=shape_tmpl,
                         copy_func="Copy" if memlet.wcr is None else "Accumulate",
@@ -752,6 +760,10 @@ class CPUCodeGen(TargetCodeGenerator):
                     state_id,
                     [src_node, dst_node],
                 )
+
+                if device_level:
+                    stream.write("__gbar.Sync();")
+                #     stream.write("}")
             else:  # Conflicted WCR
                 if dynshape == 1:
                     warnings.warn('Performance warning: Emitting dynamically-'

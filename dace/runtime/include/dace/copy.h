@@ -305,9 +305,10 @@ namespace dace
 #endif
 
                 __DACE_UNROLL
-                for (int i = 0; i < copydim; ++i)
+                for (int i = 0; i < copydim; ++i) {
                     CopyNDDynamic<T, VECLEN, ALIGNED, N - 1>::Dynamic::Copy(
                         src + i * src_stride, dst + i * dst_stride, otherdims...);
+                }
             }
 
             template <typename ACCUMULATE, typename... Args>
