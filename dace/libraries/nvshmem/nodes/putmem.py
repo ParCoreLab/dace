@@ -20,7 +20,7 @@ class ExpandPutmemNVSHMEM(ExpandTransformation):
 
     @staticmethod
     def expansion(node, parent_state, parent_sdfg, n=None, **kwargs):
-        dest, _, count_str, _ = node.validate(parent_sdfg, parent_state)
+        dest, source, count_str, _ = node.validate(parent_sdfg, parent_state)
 
         # nvshmem_putmem_TYPE?
         dtype_dest = dest.dtype.base_type

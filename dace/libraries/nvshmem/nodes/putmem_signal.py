@@ -20,7 +20,7 @@ class ExpandPutmemSignalNVSHMEM(ExpandTransformation):
 
     @staticmethod
     def expansion(node, parent_state, parent_sdfg, n=None, **kwargs):
-        dest, _, count_str, *_ = node.validate(parent_sdfg, parent_state)
+        dest, dest_ddt, source, source_ddt, count_str, *_ = node.validate(parent_sdfg, parent_state)
 
         # nvshmem_putmem_TYPE?
         dtype_dest = dest.dtype.base_type
@@ -45,11 +45,52 @@ class ExpandPutmemSignalNVSHMEM(ExpandTransformation):
         return tasklet
 
 
+@dace.library.expansion
+class ExpandIputSignalNVSHMEM(ExpandTransformation):
+    environments = [environments.nvshmem.NVSHMEM]
+
+    @staticmethod
+    def expansion(node, parent_state, parent_sdfg, n=None, **kwargs):
+        dest, dest_ddt, source, source_ddt, count_str, *_ = node.validate(parent_sdfg, parent_state)
+
+        # nvshmem_putmem_TYPE?
+        dtype_dest = dest.dtype.base_type
+
+        if dtype_dest.dtype.veclen > 1:
+            raise NotImplementedError
+
+        code = ""
+
+        # in bytes
+        nelems = f'({count_str}) * sizeof({dtype_dest})'
+
+        # MPI_Type_vector({ddt['count']}, {ddt['blocklen']}, {ddt['stride']}, {ddt['oldtype']}, & newtype);
+
+        # code += fr"nvshmem_putmem_signal_nbi(_dest, _source, {nelems}, _sig_addr, _signal, NVSHMEM_SIGNAL_SET, _pe);"
+
+        # Something with ddt['blocklen']?
+        code += fr"""
+        nvshmem_{dtype_dest}_iput(_dest, _source, {dest_ddt['stride']}, {source_ddt['stride']}, {dest_ddt['count']}, _pe);
+        nvshmem_quiet();
+        nvshmemx_signal_op(_sig_addr, _signal, NVSHMEM_SIGNAL_SET, _pe);
+        """
+
+        tasklet = dace.sdfg.nodes.Tasklet(node.name,
+                                          node.in_connectors,
+                                          node.out_connectors,
+                                          code,
+                                          language=dace.dtypes.Language.CPP,
+                                          side_effects=True)
+
+        return tasklet
+
+
 @dace.library.node
 class PutmemSignal(NVSHMEMNode):
     # Global properties
     implementations = {
-        'putmem_signal': ExpandPutmemSignalNVSHMEM
+        'putmem_signal': ExpandPutmemSignalNVSHMEM,
+        'iput_signal': ExpandIputSignalNVSHMEM          # strided
     }
 
     # putmem_block needs to be in a cooperative block
@@ -59,6 +100,7 @@ class PutmemSignal(NVSHMEMNode):
 
     # Object fields
     n = dace.properties.SymbolicProperty(allow_none=True, default=None)
+    is_strided = dace.properties.Property(default=False)
 
     nosync = dace.properties.Property(dtype=bool, default=False, desc="Do not sync if memory is on GPU")
 
@@ -74,6 +116,7 @@ class PutmemSignal(NVSHMEMNode):
         :return: dest, source, count_str, pe
         """
         labels = super().validate(sdfg, state)
+
         dest, source, count_str, sig_addr, signal, pe = labels['_dest'], labels['_source'], labels[
             NVSHMEMNode.count_key], labels['_sig_addr'], labels['_signal'], labels['_pe']
 
@@ -82,6 +125,12 @@ class PutmemSignal(NVSHMEMNode):
             raise ValueError("Dest and Source must be the same type")
 
         utils.check_signal_type(sig_addr[0])
+
+        if self.is_strided:
+            self.implementation = 'iput_signal'
+
+        dest_ddt = utils.create_ddt_if_strided(dest[1], sdfg.arrays[dest[1].data])
+        source_ddt = utils.create_ddt_if_strided(source[1], sdfg.arrays[source[1].data])
 
         return dest[0], dest_ddt, source[0], source_ddt, count_str[0], sig_addr[0], signal[0], pe[0]
 
@@ -94,8 +143,15 @@ def _putmem_signal(pv: ProgramVisitor, sdfg: SDFG, state: SDFGState, dest: str, 
     edge_maker = utils.make_edge(libnode=libnode, pv=pv, sdfg=sdfg, state=state,
                                  storage_type=dtypes.StorageType.GPU_NVSHMEM)
 
-    edge_maker(array=dest, var_name='_dest', write=True, pointer=True)
-    edge_maker(array=source, var_name='_source', write=False, pointer=True)
+    dest_edge = edge_maker(array=dest, var_name='_dest', write=True, pointer=True)
+    source_edge = edge_maker(array=source, var_name='_source', write=False, pointer=True)
     edge_maker(array=sig_addr, var_name='_sig_addr', write=True, pointer=True)
     edge_maker(array=signal, var_name='_signal', write=False, pointer=False)
     edge_maker(array=pe, var_name='_pe', write=False, pointer=False)
+
+    # Need to consider pure
+    if any(map(lambda x: not utils.is_access_contiguous(x.data, sdfg.arrays[x.data.data]), [dest_edge, source_edge])):
+        libnode.is_strided = True
+        libnode.implementation = 'iput_signal'
+        # libnode.default_implementation = libnode.implementation
+

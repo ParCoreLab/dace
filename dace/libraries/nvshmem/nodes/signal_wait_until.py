@@ -20,6 +20,8 @@ class ExpandSignalWaitUntilNVSHMEM(ExpandTransformation):
 
     @staticmethod
     def expansion(node, parent_state, parent_sdfg, n=None, **kwargs):
+        sig_addr, *_ = node.validate(parent_sdfg, parent_state)
+
         code = fr'nvshmem_signal_wait_until(_sig_addr, NVSHMEM_CMP_EQ, _signal);'
 
         tasklet = dace.sdfg.nodes.Tasklet(node.name,
@@ -28,6 +30,8 @@ class ExpandSignalWaitUntilNVSHMEM(ExpandTransformation):
                                           code,
                                           language=dace.dtypes.Language.CPP,
                                           side_effects=True)
+
+        # tasklet.in_connectors['_sig_addr'] = dace.pointer(sig_addr.dtype)
 
         return tasklet
 
