@@ -38,7 +38,7 @@ class NVSHMEM:
     """
     finalize_code = """
         nvshmem_finalize();
-        MPI_Finalize();
+        // MPI_Finalize();
     """
 
     dependencies = [MPI]
