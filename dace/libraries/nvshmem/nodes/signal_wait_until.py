@@ -62,9 +62,9 @@ class SignalWaitUntil(NVSHMEMNode):
         labels = super().validate(sdfg, state)
         sig_addr, signal = labels['_sig_addr'], labels['_signal']
 
-        utils.check_signal_type(sig_addr)
+        utils.check_signal_type(sig_addr[0])
 
-        return sig_addr, signal
+        return sig_addr[0], signal[0]
 
 
 @oprepo.replaces('dace.libraries.nvshmem.SignalWaitUntil')

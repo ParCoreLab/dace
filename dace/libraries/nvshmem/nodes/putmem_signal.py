@@ -78,12 +78,12 @@ class PutmemSignal(NVSHMEMNode):
             NVSHMEMNode.count_key], labels['_sig_addr'], labels['_signal'], labels['_pe']
 
         # Not really necessary?
-        if dest.dtype != source.dtype:
+        if dest[0].dtype != source[0].dtype:
             raise ValueError("Dest and Source must be the same type")
 
-        utils.check_signal_type(sig_addr)
+        utils.check_signal_type(sig_addr[0])
 
-        return dest, source, count_str, sig_addr, signal, pe
+        return dest[0], dest_ddt, source[0], source_ddt, count_str[0], sig_addr[0], signal[0], pe[0]
 
 
 @oprepo.replaces('dace.libraries.nvshmem.PutmemSignal')

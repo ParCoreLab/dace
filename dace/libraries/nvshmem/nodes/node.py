@@ -48,6 +48,6 @@ class NVSHMEMNode(nodes.LibraryNode):
             data = out[self._count_label][1]
             dims = [str(d) for d in data.subset.size_exact()]
             count_str = '*'.join(dims)
-            out[NVSHMEMNode.count_key] = count_str
+            out[NVSHMEMNode.count_key] = (count_str, None)  # Other entries are (Array, Memlet)... for some reason
 
-        return {k: v[0] for k, v in out.items()}
+        return {k: v for k, v in out.items()}
