@@ -53,3 +53,61 @@ def make_edge(libnode, pv, sdfg: SDFG, state: SDFGState,
 def check_signal_type(sig):
     if sig.dtype != NVSHMEM_SIGNAL_TYPE:
         raise ValueError('NVSHMEM Signals must be uint64_t')
+
+
+def is_access_contiguous(memlet, data):
+    if memlet.other_subset is not None:
+        raise ValueError("Other subset must be None, reshape in send not supported")
+    # to be contiguous, in every dimension the memlet range must have the same size
+    # than the data, except in the last dim, iff all other dims are only one element
+
+    matching = []
+    single = []
+    for m, d in zip(memlet.subset.size_exact(), data.sizes()):
+        if (str(m) == str(d)):
+            matching.append(True)
+        else:
+            matching.append(False)
+        if (m == 1):
+            single.append(True)
+        else:
+            single.append(False)
+
+    # if all dims are matching we are contiguous
+    if all(x is True for x in matching):
+        return True
+
+    # remove last dim, check if all remaining access a single dim
+    matching = matching[:-1]
+    single = single[:-1]
+    if all(x is True for x in single):
+        return True
+
+    return False
+
+
+def _create_vector_ddt(memlet, data):
+    if len(data.shape) != 2:
+        raise ValueError("Dimensionality of access not supported atm.")
+
+    ddt = dict()
+    ddt["blocklen"] = str(memlet.subset.size_exact()[-1])
+    ddt["oldtype"] = "some MPI stuff"
+    ddt["count"] = "(" + str(memlet.subset.num_elements_exact()) + ")" + "/" + str(ddt['blocklen'])
+    ddt["stride"] = str(data.strides[0])
+    return ddt
+
+
+def create_ddt_if_strided(memlet, data):
+    if not is_access_contiguous(memlet, data):
+        return _create_vector_ddt(memlet, data)
+
+    # I don't know about this
+    ddt = dict()
+
+    ddt["blocklen"] = str(memlet.subset.size_exact()[-1])
+    ddt["oldtype"] = "some MPI stuff"
+    ddt["count"] = "(" + str(memlet.subset.num_elements_exact()) + ")" + "/" + str(ddt['blocklen'])
+    ddt["stride"] = 1
+
+    return ddt
