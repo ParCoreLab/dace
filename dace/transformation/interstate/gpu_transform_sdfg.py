@@ -311,9 +311,15 @@ class GPUTransformSDFG(transformation.MultiStateTransformation):
             for node in state.nodes():
                 if sdict[node] is None:
                     if isinstance(node, (nodes.LibraryNode, nodes.NestedSDFG)):
+                        if node.schedule in dtypes.GPU_SCHEDULES:
+                            continue
+
                         node.schedule = dtypes.ScheduleType.GPU_Default
                         gpu_nodes.add((state, node))
                     elif isinstance(node, nodes.EntryNode):
+                        if node.schedule in dtypes.GPU_SCHEDULES:
+                            continue
+
                         node.schedule = dtypes.ScheduleType.GPU_Device
                         gpu_nodes.add((state, node))
                 elif self.sequential_innermaps:
