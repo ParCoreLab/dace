@@ -342,6 +342,10 @@ class Tasklet(CodeNode):
                             'additional side effects on the system state (e.g., callback). '
                             'Defaults to None, which lets the framework make assumptions based on '
                             'the tasklet contents')
+    gpu_schedule = Property(dtype=int,
+                            allow_none=True,
+                            default=None,
+                            desc='If number it fixes code')
 
     def __init__(self,
                  label,
@@ -355,7 +359,8 @@ class Tasklet(CodeNode):
                  code_exit="",
                  location=None,
                  side_effects=None,
-                 debuginfo=None):
+                 debuginfo=None,
+                 gpu_schedule=None):
         super(Tasklet, self).__init__(label, location, inputs, outputs)
 
         self.code = CodeBlock(code, language)
@@ -366,6 +371,7 @@ class Tasklet(CodeNode):
         self.code_exit = CodeBlock(code_exit, dtypes.Language.CPP)
         self.side_effects = side_effects
         self.debuginfo = debuginfo
+        self.gpu_schedule = gpu_schedule
 
     @property
     def language(self):
