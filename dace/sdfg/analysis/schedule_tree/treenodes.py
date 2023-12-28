@@ -231,6 +231,19 @@ class MapScope(DataflowScope):
 
 
 @dataclass
+class TBMapScope(DataflowScope):
+    """
+    Map scope.
+    """
+
+    def as_string(self, indent: int = 0):
+        rangestr = ', '.join(subsets.Range.dim_to_string(d) for d in self.node.map.range)
+        result = indent * INDENTATION + f'map {", ".join(self.node.map.params)} in [{rangestr}]:\n'
+        return result + super().as_string(indent)
+
+
+
+@dataclass
 class ConsumeScope(DataflowScope):
     """
     Consume scope.

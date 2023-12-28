@@ -2130,9 +2130,47 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
 
         # Add extra opening brace (dynamic map ranges, closed in MapExit
         # generator)
-        callsite_stream.write('{', sdfg, state_id, scope_entry)
 
-        if scope_map.schedule == dtypes.ScheduleType.GPU_ThreadBlock_Dynamic:
+        if scope_map.schedule not in [dtypes.ScheduleType.GPU_Grid, dtypes.ScheduleType.GPU_ThreadBlock_Dynamic]:
+            callsite_stream.write('{', sdfg, state_id, scope_entry)
+
+        if scope_map.schedule == dtypes.ScheduleType.GPU_Grid:
+            # callsite_stream.write('// Grid Map', sdfg, state_id, scope_entry)
+            callsite_stream.write('{ // Grid Map', sdfg, state_id, scope_entry)
+
+            concurrent_maps = []
+
+            # Skip scope_map
+            # Does this need to be sorted?
+            for node in dfg_scope.nodes()[1:]:
+                if not isinstance(node, dace.nodes.MapEntry):
+                    continue
+
+                concurrent_maps.append(node)
+                node.map.schedule = dtypes.ScheduleType.GPU_ThreadBlock_Cluster
+                # node.map.schedule = dtypes.ScheduleType.GPU_Device
+
+
+
+
+            # TODO: hardcoded
+            total_blocks = 108
+            threads_each = 1024
+
+            # What is going on here
+            threads = list(map(lambda m: m.range.num_elements(), concurrent_maps))
+            threads_ratio = list(map(lambda t: t / sum(threads), threads))
+            threads_sms = list(map(lambda t: t * total_blocks, threads_ratio))
+
+            prev_range = [0, 0]
+            for node, sms in zip(concurrent_maps, threads_sms):
+                prev_range[0] = prev_range[1]
+                prev_range[1] += sms
+
+                # Should be a Range
+                node.map.schedule_sms = prev_range.copy()
+
+        elif scope_map.schedule == dtypes.ScheduleType.GPU_ThreadBlock_Dynamic:
             if self.backend == 'hip':
                 raise NotImplementedError('Dynamic thread-block maps on HIP are currently unsupported')
             if len(scope_map.params) > 1:
@@ -2214,7 +2252,21 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
                     f'auto {scope_map.params[0]} = {scope_map.range[0][0]} + {dynmap_step} * {dynmap_var};', sdfg,
                     state_id, scope_entry)
 
-        elif scope_map.schedule == dtypes.ScheduleType.GPU_Device:
+        elif scope_map.schedule in [dtypes.ScheduleType.GPU_Device, dtypes.ScheduleType.GPU_ThreadBlock_Cluster]:
+            is_cluster = False
+
+            if scope_map.schedule == dtypes.ScheduleType.GPU_ThreadBlock_Cluster:
+                is_cluster = True
+
+                tb_start, tb_end = scope_map.schedule_sms
+                callsite_stream.write(f'if (grid.block_rank() >= {tb_start} && grid.block_rank() < {tb_end}) {{', sdfg,
+                                      state_id, scope_entry)
+
+                first_index = scope_map.range.min_element()[0]
+
+                callsite_stream.write(f'unsigned long long first_thread = {tb_start} * cta.size();', sdfg, state_id, scope_entry)
+                callsite_stream.write(f'unsigned long long block_offset = first_thread - {first_index};', sdfg, state_id, scope_entry)
+
             dfg_kernel = self._kernel_state.scope_subgraph(self._kernel_map)
             grid_dims, block_dims, has_tbmap, has_dtbmap, extra_gdim_offsets = self.get_kernel_dimensions(dfg_kernel)
 
@@ -2610,7 +2662,9 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
                 if self._kernel_grid_conditions:
                     self._kernel_grid_conditions.pop()
 
-        elif node.map.schedule == dtypes.ScheduleType.GPU_ThreadBlock:
+        elif node.map.schedule in [dtypes.ScheduleType.GPU_ThreadBlock, dtypes.ScheduleType.GPU_Grid, dtypes.ScheduleType.GPU_ThreadBlock_Cluster]:
+        # elif node.map.schedule in [dtypes.ScheduleType.GPU_ThreadBlock, dtypes.ScheduleType.GPU_Grid]:
+
             # Close block invocation conditions
             for i in range(len(node.map.params)):
                 callsite_stream.write('}', sdfg, state_id, node)

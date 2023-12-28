@@ -77,6 +77,10 @@ class ScheduleType(aenum.AutoNumberEnum):
     GPU_ThreadBlock = ()  #: Thread-block code
     GPU_ThreadBlock_Dynamic = ()  #: Allows rescheduling work within a block
     GPU_Persistent = ()
+
+    GPU_Grid = ()
+    GPU_ThreadBlock_Cluster = ()
+
     FPGA_Device = ()
     Snitch = ()
     Snitch_Multicore = ()
@@ -90,6 +94,9 @@ GPU_SCHEDULES = [
     ScheduleType.GPU_ThreadBlock,
     ScheduleType.GPU_ThreadBlock_Dynamic,
     ScheduleType.GPU_Persistent,
+
+    ScheduleType.GPU_Grid,
+    ScheduleType.GPU_ThreadBlock_Cluster,
 ]
 
 # A subset of on-GPU storage types

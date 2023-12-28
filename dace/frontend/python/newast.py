@@ -1520,12 +1520,23 @@ class ProgramVisitor(ExtNodeVisitor):
             self.inputs.update({k: (state, *v) for k, v in sdfg_inp.items()})
             self.outputs.update({k: (state, *v) for k, v in sdfg_out.items()})
 
+
+
         elif dec.startswith('dace.map') or dec.startswith('dace.consume'):  # Scope or scope+tasklet
-            if 'map' in dec:
+
+            # Handle tbmapscope separately
+            if dec == 'dace.mapgridscope':
                 params = self._decorator_or_annotation_params(node)
                 params, map_inputs = self._parse_map_inputs(node.name, params, node)
                 map_symbols = self._symbols_from_params(params, map_inputs)
-                entry, exit = state.add_map(node.name, ndrange=params, debuginfo=self.current_lineinfo)
+                entry, exit = state.add_map(node.name, ndrange=params, debuginfo=self.current_lineinfo,
+                                            schedule=dtypes.ScheduleType.GPU_Grid)
+
+            elif 'map' in dec:
+                params = self._decorator_or_annotation_params(node)
+                params, map_inputs = self._parse_map_inputs(node.name, params, node)
+                map_symbols = self._symbols_from_params(params, map_inputs)
+                entry, exit = state.add_map(node.name, ndrange=params, debuginfo=self.current_lineinfo, schedule=dtypes.ScheduleType.GPU_ThreadBlock_Cluster)
             elif 'consume' in dec:
                 (stream_name, stream_elem, PE_tuple, condition, chunksize) = self._parse_consume_inputs(node)
                 params = [PE_tuple, (stream_elem, self.sdfg.arrays[stream_name].dtype)]
