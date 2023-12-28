@@ -1997,7 +1997,7 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
 
         # Add extra opening brace (dynamic map ranges, closed in MapExit
         # generator)
-        # kernel_stream.write('{', sdfg, state_id, node)
+        kernel_stream.write('{', sdfg, state_id, node)
 
         # Add more opening braces for scope exit to close
         for dim in range(len(node.map.range) - 1):
