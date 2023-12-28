@@ -341,6 +341,10 @@ class CUDACodeGen(TargetCodeGenerator):
 #include <{backend_header}>
 #include <dace/dace.h>
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 {file_header}
 
 DACE_EXPORTED int __dace_init_cuda({sdfg_state_name} *__state{params});
@@ -1364,7 +1368,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
                                                    same_entry=comp_same_entry)
 
                 callsite_stream.write("}  // subgraph end", sdfg, state.node_id)
-                callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
+                callsite_stream.write('grid.sync();', sdfg, state.node_id)
 
             # done here, code is generated
             # callsite_stream.write('__gbar.Sync();', sdfg, state.node_id)
@@ -1540,7 +1544,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
 
         kernel_stream = CodeIOStream()
         self.generate_kernel_scope(sdfg, dfg_scope, state_id, scope_entry.map, kernel_name, grid_dims, block_dims,
-                                   tbmap, dtbmap, kernel_args_typed, self._globalcode, kernel_stream)
+                                   is_persistent, tbmap, dtbmap, kernel_args_typed, self._globalcode, kernel_stream)
 
         self._dispatcher.defined_vars.exit_scope(scope_entry)
 
@@ -1671,14 +1675,16 @@ int dace_number_blocks = ((int) ceil({fraction} * dace_number_SMs)) * {occupancy
         self._localcode.write(
             '''
 void  *{kname}_args[] = {{ {kargs} }};
-gpuError_t __err = {backend}LaunchKernel((void*){kname}, dim3({gdims}), dim3({bdims}), {kname}_args, {dynsmem}, {stream});'''
+gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims}), dim3({bdims}), {kname}_args, {dynsmem}, {stream});'''
             .format(kname=kernel_name,
                     kargs=', '.join(['(void *)&' + arg for arg in prototype_kernel_args] + extra_kernel_args),
                     gdims=gdims,
                     bdims=bdims,
                     dynsmem=_topy(dynsmem_size),
                     stream=cudastream,
-                    backend=self.backend), sdfg, state_id, scope_entry)
+                    backend=self.backend,
+                    persistent='Cooperative' if is_persistent else ''
+            ), sdfg, state_id, scope_entry,)
 
         # Check kernel launch for errors
         self._localcode.write(f'DACE_KERNEL_LAUNCH_CHECK(__err, "{kernel_name}", {gdims}, {bdims});')
@@ -1949,7 +1955,7 @@ gpuError_t __err = {backend}LaunchKernel((void*){kname}, dim3({gdims}), dim3({bd
         return grid_size, block_size, len(tb_maps_sym_map) > 0, has_dtbmap, extra_dim_offsets
 
     def generate_kernel_scope(self, sdfg: SDFG, dfg_scope: ScopeSubgraphView, state_id: int, kernel_map: nodes.Map,
-                              kernel_name: str, grid_dims: list, block_dims: list, has_tbmap: bool, has_dtbmap: bool,
+                              kernel_name: str, grid_dims: list, block_dims: list, is_persistent: bool, has_tbmap: bool, has_dtbmap: bool,
                               kernel_params: list, function_stream: CodeIOStream, kernel_stream: CodeIOStream):
         node = dfg_scope.source_nodes()[0]
 
@@ -1973,9 +1979,13 @@ gpuError_t __err = {backend}LaunchKernel((void*){kname}, dim3({gdims}), dim3({bd
                         [int(x) for x in Config.get('compiler', 'cuda', 'dynamic_map_block_size').split(',')])), sdfg,
                 state_id, node)
 
+        if is_persistent:
+            kernel_stream.write('cg::thread_block cta = cg::this_thread_block();', sdfg, state_id, node)
+            kernel_stream.write('cg::grid_group grid = cg::this_grid();', sdfg, state_id, node)
+
         # Add extra opening brace (dynamic map ranges, closed in MapExit
         # generator)
-        kernel_stream.write('{', sdfg, state_id, node)
+        # kernel_stream.write('{', sdfg, state_id, node)
 
         # Add more opening braces for scope exit to close
         for dim in range(len(node.map.range) - 1):
@@ -2246,6 +2256,8 @@ gpuError_t __err = {backend}LaunchKernel((void*){kname}, dim3({gdims}), dim3({bd
                         # If we defaulted to 32 threads per block, offset by thread ID
                         if not has_tbmap or has_dtbmap:
                             block_expr = '(%s * %s + threadIdx.%s)' % (block_expr, _topy(block_dims[i]), _named_idx(i))
+                        if is_cluster:
+                            block_expr = 'grid.thread_rank() - block_offset'
 
                     expr = _topy(bidx[i]).replace('__DAPB%d' % i, block_expr)
 
@@ -2297,7 +2309,7 @@ gpuError_t __err = {backend}LaunchKernel((void*){kname}, dim3({gdims}), dim3({bd
                             condition += '%s < %s' % (v, _topy(maxel + 1))
 
                     if is_persistent and not has_tbmap:
-                        stride = 'gridDim.x * {}'.format(_topy(block_dims[i]))
+                        stride = 'cta.size()'.format(_topy(block_dims[i]))
                     elif is_persistent and has_tbmap:
                         stride = 'gridDim.x'
                     else:
@@ -2307,7 +2319,7 @@ gpuError_t __err = {backend}LaunchKernel((void*){kname}, dim3({gdims}), dim3({bd
                     if len(condition) > 0:
                         varname, expr = declarations.pop(0)
                         callsite_stream.write(
-                            'for (int {varname} = {expr}; {cond}; {varname} += '
+                            'for (unsigned long long {varname} = {expr}; {cond}; {varname} += '
                             '{stride}) {{'.format(
                                 varname=varname,
                                 expr=expr,
@@ -2524,7 +2536,7 @@ gpuError_t __err = {backend}LaunchKernel((void*){kname}, dim3({gdims}), dim3({bd
                     callsite_stream.write('}', sdfg, state_id, scope_entry)
 
                 # Synchronize entire grid
-                callsite_stream.write('__gbar.Sync();', sdfg, state_id, scope_entry)
+                callsite_stream.write('grid.sync();', sdfg, state_id, scope_entry)
 
                 # Rewrite grid conditions
                 for cond in self._kernel_grid_conditions:
@@ -2566,6 +2578,11 @@ gpuError_t __err = {backend}LaunchKernel((void*){kname}, dim3({gdims}), dim3({bd
         result = self._cpu_codegen.generate_nsdfg_arguments(sdfg, dfg, state, node)
         if self.create_grid_barrier:
             result.append(('cub::GridBarrier&', '__gbar', '__gbar'))
+
+        # Bad bad
+        if self._kernel_map is not None and self._kernel_map.schedule == dtypes.ScheduleType.GPU_Persistent:
+            result.append(('cg::thread_block', 'cta', 'cta'))
+            result.append(('cg::grid_group', 'grid', 'grid'))
 
         # Add data from nested SDFGs to kernel arguments
         result.extend([(atype, aname, aname) for atype, aname, _ in self.extra_nsdfg_args])
