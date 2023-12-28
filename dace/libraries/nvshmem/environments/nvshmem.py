@@ -37,7 +37,7 @@ class NVSHMEM:
         nvshmemx_init_attr(NVSHMEMX_INIT_WITH_MPI_COMM, &attr);
     """
     finalize_code = """
-        nvshmem_finalize();
+        // nvshmem_finalize();
         // MPI_Finalize();
     """
 

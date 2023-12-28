@@ -23,10 +23,13 @@ class ExpandPutNVSHMEM(ExpandTransformation):
         labels = node.validate(parent_sdfg, parent_state)
         dest, value, pe = labels['_dest'], labels['_value'], labels['_pe']
 
+        dtype_dest = dest.dtype
+
         code = ""
 
         # in bytes
-        code += f"nvshmem_p(_dest, _value, _pe);"
+        code += f"nvshmem_{dtype_dest}_p(_dest, _value, _pe);"
+        # code += f"nvshmem_p(_dest, _value, _pe);"
 
         tasklet = dace.sdfg.nodes.Tasklet(node.name,
                                           node.in_connectors,
@@ -83,8 +86,9 @@ def _put(pv: ProgramVisitor, sdfg: SDFG, state: SDFGState, dest: str, value: Uni
          pe: Union[str, sp.Expr, Number]):
     libnode = Put('_Put_')
 
-    edge_maker = utils.make_edge(libnode=libnode, pv=pv, sdfg=sdfg, state=state)
+    edge_maker = utils.make_edge(libnode=libnode, pv=pv, sdfg=sdfg, state=state,
+                                 storage_type=dace.dtypes.StorageType.GPU_NVSHMEM)
 
-    edge_maker(array=dest, var_name="_dest", write=True, pointer=True)
+    edge = edge_maker(array=dest, var_name="_dest", write=True, pointer=True)
     edge_maker(array=value, var_name="_value", write=False, pointer=False)
     edge_maker(array=pe, var_name="_pe", write=False, pointer=False)

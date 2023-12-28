@@ -42,6 +42,8 @@ class ExpandPutmemNVSHMEM(ExpandTransformation):
                                           language=dace.dtypes.Language.CPP,
                                           side_effects=True)
 
+        tasklet.location['gpu_context'] = 'thread'
+
         return tasklet
 
 
@@ -100,7 +102,7 @@ class ExpandPutmemTaskletNVSHMEM(ExpandTransformation):
 
         _, me, mx = state.add_mapped_tasklet('_nvshmem_putmem_',
                                              dict(__i="0:1"),
-                                             {},
+                                             {'dest': dace.Mem},
                                              code,
                                              {},
                                              # schedule=dace.ScheduleType.GPU_ThreadBlock,
@@ -161,8 +163,10 @@ class Putmem(NVSHMEMNode):
     }
 
     # putmem_block needs to be in a cooperative block
-    default_implementation = 'put_tasklet'  # Magically works with 1 GPU
-    # default_implementation = 'putmem'
+    # default_implementation = 'put_tasklet'  # Magically works with 1 GPU
+    default_implementation = 'putmem_tasklet'
+
+    implementations['pure'] = implementations[default_implementation]
 
     # Object fields
     n = dace.properties.SymbolicProperty(allow_none=True, default=None)
