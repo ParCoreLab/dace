@@ -1314,12 +1314,12 @@ class ProgramVisitor(ExtNodeVisitor):
         propagate_states(self.sdfg)
 
         # This is awful, what if there are two nodes
-        if len(state.nodes()):
-            last_node = list(state.topological_sort(state.nodes()[-1]))[-1]
-            last_data = last_node.data
-
-            if last_data in self.inputs:
-                self.outputs[last_data] = self.inputs[last_data]
+        # if len(state.nodes()):
+        #     last_node = list(state.topological_sort(state.nodes()[-1]))[-1]
+        #     last_data = last_node.data
+        # 
+        #     if last_data in self.inputs:
+        #         self.outputs[last_data] = self.inputs[last_data]
 
         for state, memlet, inner_indices in itertools.chain(self.inputs.values(), self.outputs.values()):
             if state is not None and state.dynamic_executions:
