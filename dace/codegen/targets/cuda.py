@@ -2360,7 +2360,7 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
                     # Optimize conditions if they are always true
                     if i >= 3 or (dsym[i] >= minel) != True:
                         condition += '%s >= %s' % (v, _topy(minel))
-                    if (i >= 3
+                    if (i >= 3 or is_persistent
                             or ((dsym_end[i] < maxel) != False and ((dsym_end[i] % self._block_dims[i]) != 0) == True)
                             or (self._block_dims[i] > maxel) == True):
                         if len(condition) > 0:
@@ -2376,9 +2376,10 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
 
                     if is_persistent and not has_tbmap:
                         try:
-                            stride = 'cta.size()'.format(_topy(block_dims[i]))
+                            # TODO: not a good idea
+                            stride = self._grid_dims[i]
                         except IndexError:
-                            stride = 'cta.size()'.format(_topy(32))
+                            stride = 'blockDim.z'
                     elif is_persistent and has_tbmap:
                         stride = 'gridDim.x'
                     else:
