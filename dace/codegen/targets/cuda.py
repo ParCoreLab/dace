@@ -1807,7 +1807,7 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
             submap: nodes.Map
             if submap.schedule != dtypes.ScheduleType.GPU_Device or submap is kernelmap_entry.map:
                 continue
-            if extra_grid_dims is not None and len(submap.params) != len(extra_grid_dims):
+            if extra_grid_dims is not None and len(submap.params) != len(extra_grid_dims) and not is_persistent:
                 raise NotImplementedError(
                     'Multiple GPU_Device sub-ranges with different dimensionality not yet implemented (found: '
                     f'{len(submap.params)}, existing: {len(extra_grid_dims)}, map: {kernelmap_entry})')
@@ -2310,6 +2310,7 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
                 # variables that need to be declared + the value they need to be initialized with
                 declarations = []
 
+                # for i in range(min(len(device_map_range), 3)):
                 for i in range(min(len(device_map_range), 3)):
                     varname = scope_map.params[-i - 1]
 
@@ -2374,7 +2375,10 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
                             condition += '%s < %s' % (v, _topy(maxel + 1))
 
                     if is_persistent and not has_tbmap:
-                        stride = 'cta.size()'.format(_topy(block_dims[i]))
+                        try:
+                            stride = 'cta.size()'.format(_topy(block_dims[i]))
+                        except IndexError:
+                            stride = 'cta.size()'.format(_topy(32))
                     elif is_persistent and has_tbmap:
                         stride = 'gridDim.x'
                     else:
