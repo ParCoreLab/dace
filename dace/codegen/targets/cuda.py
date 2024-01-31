@@ -1468,7 +1468,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
                     self.extra_nsdfg_args.append((desc.as_arg(name=''), inner_name, outer_name))
                     self._dispatcher.defined_vars.add(inner_name,
                                                       DefinedType.Pointer,
-                                                      desc.dtype.ctype,
+                                                      desc.as_arg(name=''),
                                                       allow_shadowing=True)
                     extra_call_args.append(outer_name)
                     extra_call_args_typed.append(desc.as_arg(name=inner_name))
@@ -1544,6 +1544,7 @@ void __dace_alloc_{location}(uint32_t {size}, dace::GPUStream<{type}, {is_pow2}>
                     CUDACodeGen._in_device_code = True
                     inner_ptrname = cpp.ptr(aname, data_desc, sdfg, self._frame)
                     CUDACodeGen._in_device_code = False
+
                     self._dispatcher.defined_vars.add(inner_ptrname, defined_type, ctype, allow_shadowing=True)
 
                     # Rename argument in kernel prototype as necessary
