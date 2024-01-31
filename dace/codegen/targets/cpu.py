@@ -209,7 +209,7 @@ class CPUCodeGen(TargetCodeGenerator):
         atype, aname, value = cpp.emit_memlet_reference(self._dispatcher,
                                                         sdfg,
                                                         memlet,
-                                                        name,
+                                                        ptrname,
                                                         dtypes.pointer(nodedesc.dtype),
                                                         ancestor=0,
                                                         is_write=is_write)
