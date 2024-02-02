@@ -2377,7 +2377,7 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
                     if is_persistent and not has_tbmap:
                         try:
                             # TODO: not a good idea
-                            stride = self._grid_dims[i]
+                            stride = self._block_dims[i]
                         except IndexError:
                             stride = 'blockDim.z'
                     elif is_persistent and has_tbmap:
