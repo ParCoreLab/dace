@@ -2668,15 +2668,23 @@ gpuError_t __err = {backend}Launch{persistent}Kernel((void*){kname}, dim3({gdims
         old_codegen = self._cpu_codegen.calling_codegen
         self._cpu_codegen.calling_codegen = self
 
-        self._cpu_codegen._generate_NestedSDFG(sdfg, dfg, state_id, node, function_stream, callsite_stream)
+        need_sync = False
 
         # Grid sync after a nested sdfg because it needs to grid sync after a nested sdfg
         # TODO: Not sure about all the schedule types, especially GPU_Grid
-        # TODO: schedule or device code?
-        # if old_schedule == dtypes.ScheduleType.GPU_Persistent:
+        # TODO: is toplevel_schedule really necessary?
+        # Not happy
         if self._in_device_code:
             if node.schedule in [dtypes.ScheduleType.GPU_Default, dtypes.ScheduleType.GPU_Device, dtypes.ScheduleType.GPU_Grid]:
-                callsite_stream.write('grid.sync();', sdfg, state_id, node)
+                need_sync = True
+
+        if need_sync:
+            callsite_stream.write('grid.sync();', sdfg, state_id, node)
+
+        self._cpu_codegen._generate_NestedSDFG(sdfg, dfg, state_id, node, function_stream, callsite_stream)
+
+        if need_sync:
+            callsite_stream.write('grid.sync();', sdfg, state_id, node)
 
         self._cpu_codegen.calling_codegen = old_codegen
         self._toplevel_schedule = old_schedule
